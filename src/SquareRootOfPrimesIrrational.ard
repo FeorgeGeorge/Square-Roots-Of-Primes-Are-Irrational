@@ -1,0 +1,77 @@
+\import Algebra.Domain.Euclidean
+\import Algebra.Meta
+\import Algebra.Monoid
+\import Algebra.Monoid.GCD
+\import Arith.Int
+\import Algebra.Monoid.Prime (Prime)
+\import Arith.Nat
+\import Arith.Prime (isPrime=>prime)
+\import Arith.Rat
+\import Function.Meta
+\import Logic
+\import Meta
+\import Paths
+\import Paths.Meta
+
+\import IntRing
+\open RatField (productNonZero)
+\open Monoid (LDiv)
+
+\func two-prime : Prime {IntRing} 2 => nat-prime-is-int-prime (isPrime=>prime {2} $ idp)
+
+\func square-root-of-2-is-irr : \Pi (x : Rat) -> (x * x = 2) -> Empty
+  => square-root-of-prime-irrational 2 two-prime
+
+\func square-root-of-prime-irrational (n : Nat) (p : Prime (pos n)) (x : Rat) (root : x * x = n)
+  : Empty
+=> \let nom-div : LDiv (pos n) (ratNom x) => nom-divisible x root
+        | abs-nom-even => iabs-lem nom-div
+        | denom-div => pos-div-to-int (denom-divisible x root)
+        | gcd-step : LDiv n (EuclideanSemiringData.gcd (iabs $ ratNom x) (ratDenom x)) => GCD.gcd-univ {EuclideanSemiringData.gcd-isGCD (iabs $ ratNom x) (ratDenom x)}
+            n abs-nom-even denom-div
+        | gcd-is-1 : EuclideanSemiringData.gcd (iabs $ ratNom x) (ratDenom x) = 1 => ratReduced x
+        | prime-div-one : LDiv {NatSemiring} n 1 => transport (LDiv n __) gcd-is-1 gcd-step
+   \in
+  prime-not|one n p (nat-ldiv-to-pos|pos prime-div-one)
+\where {
+  \func prime-not-zero : Not (pos n = pos 0) => \lam eq => zero-not-prime-Int (transport Prime eq p)
+
+  \func nom-squared-is-divisible (x : Rat) (root : x * x = n) : LDiv {IntRing} n (ratNom x * ratNom x)
+  \elim x
+    | rat nom denom denom/=0 reduced => unfold at root $ (\new LDiv {
+      | inv => denom Nat.* denom
+      | inv-right =>
+        \let b-squared/=0 => productNonZero (\box denom/=0) (\box denom/=0)
+             | eq => rat_alt_makeRat.aux {nom * nom} {denom Nat.* denom} {b-squared/=0}
+        \in rewriteF ide-right $ rewriteF root eq
+    })
+
+  \func square-div {x : Int} (n|x*x : LDiv (pos n) (x * x)) : LDiv (pos n) x =>
+    \let aux : TruncP (LDiv (pos n) x) =>
+      cases (p.isPrime n|x*x) \with {
+        | byLeft a => inP a
+        | byRight b => inP b
+      }
+    \in
+    TruncP.remove (truncp-div prime-not-zero x) aux
+
+  \func nom-divisible (x : Rat) (root : x * x = n) : LDiv (pos n) (ratNom x) =>
+    square-div $ nom-squared-is-divisible x root
+
+  \func denom-divisible (x : Rat) (root : x * x = n) : LDiv (pos n) (pos (ratDenom x)) =>
+    \let nom-even => nom-divisible x root \in
+      \case \elim x, \elim root, \elim nom-even \with {
+        | rat nom denom denom/=0 reduced, root, (e, p) =>
+          \let b-squared/=0 => productNonZero (\box denom/=0) (\box denom/=0)
+               | eq => rat_alt_makeRat.aux {nom * nom} {denom Nat.* denom} {b-squared/=0}
+               | p1 : pos n * (pos denom * pos denom) = nom * nom => rewriteF (ide-right {IntRing}) $ rewriteF root eq
+               | p2 : pos n * (pos denom * pos denom) = pos n * (pos n * (e * e)) => p1 *> rewrite (inv p) equation
+               | p3 : pos denom * pos denom = pos n * (e * e) => cancel_*-left {n} prime-not-zero p2
+               | ldiv2 : LDiv (pos n) (pos denom * pos denom) => \new LDiv {
+                 | inv => e * e
+                 | inv-right => inv p3
+               }
+          \in square-div {pos denom} ldiv2
+      }
+}
+

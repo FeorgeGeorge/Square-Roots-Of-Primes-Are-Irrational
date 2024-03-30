@@ -1,0 +1,248 @@
+\import Algebra.Monoid
+\import Arith.Int
+\import Algebra.Monoid.Prime (Prime)
+\import Arith.Nat
+\import Data.Or
+\import Function.Meta
+\import HLevel
+\import Logic
+\import Logic.Meta
+\import Meta
+\import Paths
+\import Paths.Meta
+\open Monoid (LDiv, Inv)
+
+--- 1. Proof of left cancelation by a nonzero integer
+--- 2. and a proof that NatSemiring primes are IntRing primes
+
+\func intRing-invs (x : Inv {IntRing}) : Or (x = {IntRing} 1) (x = {IntRing} -1)
+\elim x
+  | (a,b,p-left,p-right) => intUnits p-left
+
+\func pos-inj {a b : Nat} (p : pos a = pos b) : a = b => pmap iabs p
+
+\func neg-inj {a b : Nat} (p : neg a = neg b) : a = b => pmap iabs p
+
+\func inv-not-prime {x : Nat} (p : Prime {NatSemiring} x) (inv : Inv {IntRing} x) : Empty =>
+  cases (inv, intRing-invs inv) \with {
+    | (e,p1,p2), inl a => p.notInv $ transportInv Inv (pos-inj a) Inv.ide-isInv
+    | (e,p1,p2), inr b => contradiction
+  }
+
+\func zero-not-prime (p : Prime {NatSemiring} 0) : Empty => \case p.isCancelable-left {0} {1} idp
+
+\func zero-not-prime-Int (p : Prime {IntRing} 0) : Empty => \case p.isCancelable-left {0} {1} idp
+
+\func pos-neg-lemma {x y : Nat} (p : pos x = neg y) : \Sigma (x = 0) (y = 0)
+  | {0}, {0}, p => (idp, idp)
+  | {suc x}, {0}, ()
+
+\func div-zero {x y : Nat} (p : x * y = 0) : Or (x = 0) (y = 0)
+  | {0}, {0}, p => inl idp
+  | {0}, {suc y}, p => inl idp
+  | {suc x}, {0}, p => inr idp
+
+\func int-zero {x y : Nat} (p1 : x = 0) (p2 : y = 0) : pos x = neg y
+  | {0}, {0}, p1, p2 => idp
+  | {0}, {suc y}, p1, ()
+  | {suc x}, {0}, (), p2
+
+\func is-zero {n : Nat} (x : Nat) (p : suc n * x = 0) : x = 0 => cases (div-zero p) \with {
+  | inl a => absurd contradiction
+  | inr b => b
+}
+
+\func neg-lem {n : Nat} {x : Int} : neg (suc n) * x = pos (suc n) * IntRing.negative x
+\elim x
+  | pos n1 => idp
+  | neg (suc n1) => idp
+
+\func negative-inj {x y : Int} (p : IntRing.negative x = IntRing.negative y) : x = {IntRing} y
+  | {pos n}, {pos n1}, p => pmap pos $ neg-inj p
+  | {pos n}, {neg (suc n1)}, p => pmap IntRing.negative p
+  | {neg (suc n)}, {pos (suc n1)}, p => pmap IntRing.negative p
+  | {neg (suc n)}, {neg (suc n1)}, p => pmap neg $ pos-inj p
+
+\func cancel_*-left {n : Int} (n/=0 : Not (n = 0)) {x y : Int} (p : n * x = n * y) : x = y
+\elim n
+  | 0 => absurd (n/=0 idp)
+  | pos (suc n) => pos-cancel_*-left p
+  | neg (suc n) => neg-cancel_*-left p
+  \where {
+    \func pos-cancel_*-left {n : Nat} {x y : Int} (p : pos (suc n) * x = pos (suc n) * y) : x = y =>
+      \let n/=0 : Not (suc n = 0) => \lam _ => absurd contradiction \in
+        cases (x, y, p) \with {
+          | pos a, pos b, p1 => pmap pos $ NatSemiring.cancel_*-left n/=0 (pos-inj p1)
+          | pos a, neg (suc b), p1 => pos_*-lem p1
+          | neg (suc b), pos a, p1 => inv (pos_*-lem (inv p1))
+          | neg (suc a), neg (suc b), p1 => pmap neg $ NatSemiring.cancel_*-left n/=0 (neg-inj p1)
+        }
+
+    \func pos_*-lem {n : Nat} {x y : Nat} (p : pos (suc n) * pos x = pos (suc n) * neg y) : pos x = neg y =>
+      \let zero-lem => pos-neg-lemma p
+           | n1-is-zero => is-zero x zero-lem.1
+           | n2-is-zero => is-zero y zero-lem.2 \in
+        int-zero n1-is-zero n2-is-zero
+
+    \func neg-cancel_*-left {n : Nat} {x y : Int} (p : neg (suc n) * x = neg (suc n) * y) : x = y =>
+      \let pp : pos (suc n) * IntRing.negative x = pos (suc n) * IntRing.negative y =>
+             rewriteF (neg-lem, neg-lem) p
+           | t => pos-cancel_*-left pp
+      \in negative-inj t
+  }
+
+\func self-div (x : Nat) : LDiv x x \cowith
+  | inv => 1
+  | inv-right => rewrite ide-right idp
+
+\func zero-div : LDiv 0 0 => self-div 0
+
+\func div-zero' (x : Nat) : LDiv x 0 \cowith
+  | inv => 0
+  | inv-right => idp
+
+\func ldiv {n x y : Nat} (p : x * n = y) : LDiv x y\cowith
+  | inv => n
+  | inv-right => p
+
+\func nat-prime-is-int-prime {n : Nat} (p : Prime {NatSemiring} n) : Prime {IntRing} n =>
+  \new Prime {
+    | notInv => inv-not-prime p
+    | isCancelable-left {x} {y} =>
+      \let n-not-one : Not (n = {Int} 0) => \lam eq => zero-not-prime (transport Prime (pos-inj eq) p) \in
+        cancel_*-left {n} n-not-one {x} {y}
+    | isPrime {x} {y} ld => cases (x, y, ld) \with {
+      | pos n1, pos m1, (e, p1) => cases (e, p1) \with {
+        | pos e, p2 =>
+          \let p3 => pos-inj p2
+               | ldiv : LDiv n (n1 * m1) => ldiv p3
+          \in
+            cases (p.isPrime ldiv) \with {
+              | byLeft a => byLeft $ nat-ldiv-to-pos|pos a
+              | byRight b => byRight $ nat-ldiv-to-pos|pos b
+            }
+        | neg (suc n3), p2 => unfold at p2 $
+        \let s => pos-neg-lemma (inv p2)
+             | n-is-zero => is-zero {n3} n (rewrite *-comm s.2)
+        \in
+          cases (div-zero s.1) \with {
+            | inl a => byLeft $ nat-ldiv-to-pos|pos $ transport2 LDiv (inv n-is-zero) (inv a) zero-div
+            | inr b => byRight $ nat-ldiv-to-pos|pos $ transport2 LDiv (inv n-is-zero) (inv b) zero-div
+          }
+      }
+      | pos n1, neg (suc n2), (e,p1) => cases (e, p1) \with {
+        | pos n3, p2 => unfold at p2 $
+        \let s => pos-neg-lemma p2
+             | n1-is-zero => is-zero n1 (rewrite *-comm s.2)
+        \in
+          byLeft $ nat-ldiv-to-pos|pos $ transport (LDiv n __) (inv n1-is-zero) (div-zero' n)
+        | neg (suc n3), p2 => unfold at p2 $
+        \let p4 => neg-inj p2
+             | ldiv : LDiv n (n1 * suc n2) => ldiv {suc n3} p4
+        \in
+          cases (p.isPrime {n1} {suc n2} ldiv) \with {
+            | byLeft a => byLeft $ nat-ldiv-to-pos|pos a
+            | byRight b => byRight $ nat-ldiv-to-pos|neg b
+          }
+      }
+      | neg (suc n1), pos n2, (e,p1) => cases (e, p1) \with {
+        | pos n3, p2 =>
+          \let s => pos-neg-lemma p2
+               | n2-is-zero => is-zero n2 s.2
+          \in
+            unfold at p2 $ byRight $ nat-ldiv-to-pos|pos $ transport (LDiv n __) (inv n2-is-zero) (div-zero' n)
+        | neg (suc n3), p2 =>
+          \let p4 => neg-inj p2
+               | ldiv : LDiv n (suc n1 * n2) => ldiv {suc n3} p4
+          \in
+            cases (p.isPrime ldiv) \with {
+              | byLeft a => byLeft $ nat-ldiv-to-pos|neg a
+              | byRight b => byRight $ nat-ldiv-to-pos|pos b
+            }
+      }
+      | neg (suc n1), neg (suc n2), (e,p1) => cases (e, p1) \with {
+        | pos n3, p2 => unfold at p2 $
+        \let p3 => pos-inj p2
+             | ldiv : LDiv n (suc n1 * suc n2) => ldiv p3
+        \in
+          cases (p.isPrime {suc n1} {suc n2} ldiv) \with {
+            | byLeft a => byLeft $ nat-ldiv-to-pos|neg a
+            | byRight b => byRight $ nat-ldiv-to-pos|neg b
+          }
+      }
+    }
+  }
+
+\func nat-ldiv-to-pos|pos {x y : Nat} (x|y : LDiv x y) : LDiv {IntRing} (pos x) (pos y)
+\elim x|y
+  | (e,p1) => \new LDiv {
+    | inv => pos e
+    | inv-right => pmap pos p1
+  }
+
+\func nat-ldiv-to-pos|neg {x y : Nat} (x|y : LDiv x y) : LDiv {IntRing} (pos x) (neg y)
+\elim x|y
+  | (e,p1) => \new LDiv {
+    | inv => neg e
+    | inv-right => pmap neg p1
+  }
+
+\func pos-div-to-int {x y : Nat} (ld : LDiv (pos x) (pos y)) : LDiv x y
+\elim ld
+  | (e,p) => cases (e,p) \with {
+    | pos n, p1 => \new LDiv {
+      | inv => n
+      | inv-right => pos-inj p1
+    }
+    | neg (suc n), p1 =>
+      \let s => pos-neg-lemma (inv p1)
+           | s2 => s.2
+           | q => is-zero x (rewrite *-comm s2)
+      \in
+        unfold at p1 $ transport2 LDiv (inv q) (inv s.1) zero-div
+  }
+
+\func neg-div-to-nat {x y : Nat} (ld : LDiv (pos x) (neg y)) : LDiv x y
+\elim ld
+  | (e,p) => cases (e, p) \with {
+    | pos n, p1 =>
+      \let s => (pos-neg-lemma p1).2 \in
+        transport (LDiv x __) (inv s) (div-zero' x)
+    | neg (suc n), p1 => unfold at p1 $
+    \let p2 => neg-inj p1 \in
+      \new LDiv {
+        | inv => suc n
+        | inv-right => p2
+      }
+  }
+
+\func iabs-lem {x : Nat} {y : Int} (x|y : LDiv (pos x) y) : LDiv x (iabs y)
+\elim y
+  | pos n => pos-div-to-int x|y
+  | neg (suc n) => neg-div-to-nat x|y
+
+\func truncp-div {x : Int} (x/=0 : Not (x = {Int} 0)) (y : Int): isProp (LDiv x y) =>
+  \lam a b => \case\elim a, \elim b \with {
+    | (e,p), (e1,p1) =>
+      \let eq : x * e = x * e1 => p *> inv p1 \in
+        exts $ cancel_*-left x/=0 eq
+  }
+
+\func prime-not-one (n : Nat) (p : Prime (pos n)) : Not (n = 1) => \lam eq =>
+    \let one-prime : Prime (pos 1) => transport (\lam x => Prime {IntRing} x) eq p
+    \in one-prime.notInv Inv.ide-isInv
+
+\func ldiv-one-is-inv (n : Int) (l : LDiv n 1) : Inv n
+\elim l
+  | (e,p) => \new Inv {
+    | inv => e
+    | inv-left => rewrite *-comm p
+    | inv-right => p
+  }
+
+\func prime-not|one (n : Nat) (p : Prime (pos n)) (l : LDiv (pos n) (pos 1)) : Empty =>
+  cases (intRing-invs (ldiv-one-is-inv (pos n) l)) \with {
+    | inl a => prime-not-one n p (pos-inj a)
+    | inr b => \let s => (pos-neg-lemma b).2 \in
+      contradiction
+  }
